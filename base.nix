@@ -1,26 +1,31 @@
-{ config, pkgs, lib, flake, hostname, powerProfile, gpu, cpuVendor, nvidiaBusId, amdBusId, intelBusId, ... }:
+{ config, pkgs, lib, flake, nur, hostname, powerProfile, gpu, cpuVendor, nvidiaBusId, amdBusId, intelBusId, ... }:
 let
   isNvidia = builtins.elem gpu [ "nvidia" "prime-nvidia-amd" "prime-nvidia-intel" ];
   isPrime  = builtins.elem gpu [ "prime-nvidia-amd" "prime-nvidia-intel" ];
   isAmdCpu = cpuVendor == "amd";
+  nurPkgs  = nur.legacyPackages.${pkgs.system};
 in
 {
-  # ── Boot ──────────────────────────────────────────────────────────────────────
+  # ── Boot ──────────────────────────────────────────────────────────────
   boot.loader.systemd-boot.enable      = true;
   boot.loader.efi.canTouchEfiVariables = true;
   boot.initrd.kernelModules = lib.optionals isNvidia [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
   boot.kernelParams = [
     "quiet" "loglevel=3"
+    "rd.systemd.show_status=false"
     "rd.udev.log_level=3"
     "udev.log_priority=3"
+    "tsc=reliable"
   ] ++ lib.optionals isNvidia [ "nvidia-drm.fbdev=1" ]
     ++ lib.optionals isAmdCpu [ "amd_pstate=active" ];
+  boot.consoleLogLevel = 0;
+  boot.initrd.verbose  = false;
 
-  # ── Kernel ────────────────────────────────────────────────────────────────────
-  boot.kernelPackages                = pkgs.linuxPackages_latest;
-  boot.kernelModules                 = [ "tcp_bbr" ];
-  boot.extraModulePackages           = [ config.boot.kernelPackages.r8168 ];
-  boot.blacklistedKernelModules      = [ "r8169" ];
+  # ── Kernel ────────────────────────────────────────────────────────────
+  boot.kernelPackages           = pkgs.linuxPackages_latest;
+  boot.kernelModules            = [ "tcp_bbr" ];
+  boot.extraModulePackages      = [ config.boot.kernelPackages.r8168 ];
+  boot.blacklistedKernelModules = [ "r8169" ];
   boot.kernel.sysctl = {
     "net.ipv4.tcp_congestion_control" = "bbr";
     "net.core.default_qdisc"          = "fq";
@@ -36,52 +41,52 @@ in
     "net.ipv6.conf.all.use_tempaddr"  = 2;
   };
 
-  # ── Hardware ──────────────────────────────────────────────────────────────────
-  services.irqbalance.enable              = true;
-  hardware.cpu.amd.updateMicrocode        = lib.mkIf isAmdCpu true;
-  powerManagement.cpuFreqGovernor         = if powerProfile == "performance" then "performance"
-                                            else if powerProfile == "balanced"   then "schedutil"
-                                            else "powersave";
+  # ── Hardware ──────────────────────────────────────────────────────────
+  services.irqbalance.enable       = true;
+  hardware.cpu.amd.updateMicrocode = lib.mkIf isAmdCpu true;
+  powerManagement.cpuFreqGovernor  = if powerProfile == "performance" then "performance"
+                                     else if powerProfile == "balanced"   then "schedutil"
+                                     else "powersave";
 
-  hardware.graphics.enable               = true;
-  hardware.graphics.enable32Bit          = true;
-  hardware.graphics.extraPackages        = with pkgs; [
-    vulkan-loader
-    vulkan-validation-layers
-  ];
-  hardware.nvidia.modesetting.enable     = lib.mkIf isNvidia true;
-  hardware.nvidia.open                   = lib.mkIf isNvidia false;
-  hardware.nvidia.nvidiaSettings         = lib.mkIf isNvidia true;
-  hardware.nvidia.package                = lib.mkIf isNvidia config.boot.kernelPackages.nvidiaPackages.stable;
-  hardware.nvidia.powerManagement.enable = lib.mkIf isNvidia false;
-  hardware.nvidia.prime.sync.enable      = lib.mkIf isPrime true;
-  hardware.nvidia.prime.nvidiaBusId      = lib.mkIf isPrime nvidiaBusId;
-  hardware.nvidia.prime.amdgpuBusId      = lib.mkIf (gpu == "prime-nvidia-amd") amdBusId;
-  hardware.nvidia.prime.intelBusId       = lib.mkIf (gpu == "prime-nvidia-intel") intelBusId;
-  services.xserver.enable                = false;
-  services.xserver.videoDrivers          = lib.mkIf isNvidia [ "nvidia" ];
+  hardware.graphics.enable = lib.mkIf isNvidia true;  # needed for nvidia kernel driver even headless
+  hardware.nvidia.modesetting.enable          = lib.mkIf isNvidia true;
+  hardware.nvidia.open                        = lib.mkIf isNvidia false;
+  hardware.nvidia.nvidiaSettings              = lib.mkIf isNvidia true;
+  hardware.nvidia.package                     = lib.mkIf isNvidia config.boot.kernelPackages.nvidiaPackages.stable;
+  hardware.nvidia.powerManagement.enable      = lib.mkIf isNvidia false;
+  hardware.nvidia.powerManagement.finegrained = lib.mkIf isNvidia false;
+  hardware.nvidia.prime.sync.enable           = lib.mkIf isPrime true;
+  hardware.nvidia.prime.nvidiaBusId           = lib.mkIf isPrime nvidiaBusId;
+  hardware.nvidia.prime.amdgpuBusId           = lib.mkIf (gpu == "prime-nvidia-amd") amdBusId;
+  hardware.nvidia.prime.intelBusId            = lib.mkIf (gpu == "prime-nvidia-intel") intelBusId;
+  services.xserver.enable                     = false;
+  services.xserver.videoDrivers              = lib.mkIf isNvidia [ "nvidia" ];
 
-  # ── Networking ────────────────────────────────────────────────────────────────
-  networking.hostName              = hostname;
-  networking.networkmanager.enable = true;
-  networking.firewall.enable       = true;
-  networking.firewall.allowedTCPPorts = [ 22 ];
+  # ── Networking ────────────────────────────────────────────────────────
+  networking.hostName                           = hostname;
+  networking.networkmanager.enable              = true;
+  networking.networkmanager.ethernet.macAddress = "random";
+  networking.firewall.enable                    = true;
+  networking.firewall.allowedTCPPorts           = [ 22 ];
   networking.extraHosts = ''
 
 '';
 
-  # ── Locale ────────────────────────────────────────────────────────────────────
-  time.timeZone    = "America/New_York";
+  # ── Locale ────────────────────────────────────────────────────────────
+  time.timeZone      = "America/New_York";
   i18n.defaultLocale = "en_US.UTF-8";
 
-  # ── SSH ───────────────────────────────────────────────────────────────────────
+  # ── SSH ───────────────────────────────────────────────────────────────
   services.openssh = {
-    enable                = true;
+    enable                          = true;
     settings.PasswordAuthentication = false;
     settings.PermitRootLogin        = "no";
   };
 
-  # ── Packages ──────────────────────────────────────────────────────────────────
+  # ── Shell ─────────────────────────────────────────────────────────────
+  programs.zsh.enable = true;
+
+  # ── Packages ──────────────────────────────────────────────────────────
   nixpkgs.config.allowUnfree = true;
   environment.systemPackages = with pkgs; [
     git
@@ -94,6 +99,7 @@ in
     htop
     btop
     tree
+    fzf
     file
     socat
     net-tools
@@ -113,12 +119,46 @@ in
     p7zip
     ntp
     busybox
+    zsh
+    speedtest-go
+    nurPkgs.repos.sh0rtround.nix-easy-search
   ];
 
-  # ── Virtualisation ────────────────────────────────────────────────────────────
-  virtualisation.docker.enable = true;
+  # ── Virtualisation ────────────────────────────────────────────────────
+  virtualisation.docker.enable   = true;
+  virtualisation.libvirtd.enable = true;
 
-  # ── Nix ───────────────────────────────────────────────────────────────────────
+  # ── Power profiles ────────────────────────────────────────────────────
+  services.power-profiles-daemon.enable = true;
+  # power-profiles-daemon ships WantedBy=graphical.target which never fires
+  # without a display manager. Pull into multi-user.target so it starts at boot.
+  systemd.services.power-profiles-daemon = {
+    overrideStrategy = "asDropin";
+    wantedBy         = [ "multi-user.target" ];
+  };
+  # Lock power profile statically — set powerProfile in config.nix to change it.
+  systemd.services.static-power-profile = {
+    description = "Lock power profile to ${powerProfile}";
+    after       = [ "multi-user.target" "power-profiles-daemon.service" ];
+    wants       = [ "power-profiles-daemon.service" ];
+    wantedBy    = [ "multi-user.target" ];
+    serviceConfig = {
+      Type         = "oneshot";
+      ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
+      ExecStart    = "${pkgs.power-profiles-daemon}/bin/powerprofilesctl set ${powerProfile}";
+    };
+  };
+
+  # ── udev ──────────────────────────────────────────────────────────────
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="usb", ATTR{power/autosuspend}="-1"
+    ACTION=="change", SUBSYSTEM=="power_supply", ATTR{type}=="Mains", RUN+="${pkgs.systemd}/bin/systemctl restart static-power-profile.service"
+  '';
+
+  # ── Nix ───────────────────────────────────────────────────────────────
+  security.sudo.extraConfig = ''
+    Defaults env_keep += "HOME"
+  '';
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   nix.registry.nixpkgs = { flake = flake; };
   nix.gc = {
@@ -126,15 +166,6 @@ in
     dates     = "weekly";
     options   = "--delete-older-than 30d";
   };
-
-  # ── udev ──────────────────────────────────────────────────────────────────────
-  services.udev.extraRules = ''
-    ACTION=="add", SUBSYSTEM=="usb", DRIVERS=="usb", ATTR{power/autosuspend}="-1"
-  '';
-
-  security.sudo.extraConfig = ''
-    Defaults env_keep += "HOME"
-  '';
 
   system.stateVersion = "25.05";
 }

@@ -3,9 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nur.url     = "github:nix-community/NUR";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, nur }:
   let
     cfg = import ./config.nix;
 
@@ -14,6 +15,7 @@
         inherit system;
         specialArgs = {
           flake        = self;
+          nur          = nur;
           hostname     = hostname;
           powerProfile = cfg.powerProfile;
           gpu          = cfg.gpu;
