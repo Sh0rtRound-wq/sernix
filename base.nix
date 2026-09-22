@@ -89,40 +89,46 @@ in
   # ── Packages ──────────────────────────────────────────────────────────
   nixpkgs.config.allowUnfree = true;
   environment.systemPackages = with pkgs; [
-    git
-    curl
-    wget
-    jq
-    bc
-    vim
-    neovim
-    htop
-    btop
-    tree
-    fzf
-    file
-    socat
-    net-tools
-    inetutils
-    dig
-    nmap
-    tcpdump
-    wireguard-tools
-    openvpn
-    python3
-    go
-    gcc
-    docker
-    docker-compose
-    ansible
-    lazygit
-    p7zip
-    ntp
-    busybox
-    zsh
-    speedtest-go
-    nurPkgs.repos.sh0rtround.nix-easy-search
+git
+curl
+wget
+jq
+bc
+vim
+neovim
+htop
+btop
+tree
+fzf
+file
+socat
+net-tools
+inetutils
+dig
+nmap
+tcpdump
+wireguard-tools
+openvpn
+python3
+go
+gcc
+docker
+docker-compose
+ansible
+lazygit
+p7zip
+ntp
+busybox
+zsh
+speedtest-go
+nurPkgs.repos.sh0rtround.nix-easy-search
   ];
+
+# nixadd
+
+  networking.extraHosts = ''
+
+'';
 
   # ── Virtualisation ────────────────────────────────────────────────────
   virtualisation.docker.enable   = true;
